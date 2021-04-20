@@ -380,6 +380,9 @@ type Cursor struct {
 	newData         bool
 	Err             error
 	description     [][]string
+
+	// Caller is responsible for managing this channel
+	Logs			chan<- []string
 }
 
 // WaitForCompletion waits for an async operation to finish
@@ -427,6 +430,15 @@ func (c *Cursor) WaitForCompletion(ctx context.Context) {
 		if c.Error() != nil {
 			return
 		}
+
+		if c.Logs != nil {
+			logs := c.FetchLogs()
+			if c.Error() != nil {
+				return
+			}
+			c.Logs <- logs
+		}
+
 		time.Sleep(time.Duration(time.Duration(c.conn.configuration.PollIntervalInMillis)) * time.Millisecond)
 		mux.Lock()
 		if contextDone {
@@ -467,6 +479,15 @@ func (c *Cursor) Execute(ctx context.Context, query string, async bool) {
 			return
 		}
 		c.state = _ASYNC_ENDED
+
+		// Flush logs after execution is finished
+		if c.Logs != nil {
+			logs := c.FetchLogs()
+			if c.Error() != nil {
+				return
+			}
+			c.Logs <- logs
+		}
 	}
 }
 
